@@ -180,7 +180,7 @@ ScreenManager:
                 pos_hint: {'top': 1}
                 md_bg_color: (102 / 255, 255 / 255, 102 / 255, 1)
                 anchor_title: 'left'
-                left_action_items: [['arrow-left', lambda x: setattr(screen_manager, 'current', 'home')]]
+                left_action_items: [['arrow-left', lambda x: (setattr(screen_manager, 'current', 'home'), app.release())]]
                 elevation: 1 
             MDFlatButton:
                 text: 'Check the Speed'
@@ -236,7 +236,8 @@ class Velo(MDApp):
             print("Switch is ON")
         else:
             print("Switch is OFF")
-
+    def release(self):
+        self.capture.release()
     def check_speed(self):
         num = round(self.averageSpeed, 4)
         label = screen.ids.label_id
@@ -259,14 +260,14 @@ class Velo(MDApp):
         # layout.add_widget(self.image)
         # layout.add_widget(MDFlatButton(text="Click on me!"))
 
-        if platform == 'android':
-            from android.permissions import request_permissions, Permission
-            request_permissions([Permission.CAMERA], self.permission_granted)
+        # if platform == 'android':
+        #     from android.permissions import request_permissions, Permission
+        #     request_permissions([Permission.CAMERA], self.permission_granted)
 
-    def permission_granted(self):
+   # def permission_granted(self):
 
         self.image = screen.ids.image_widget
-        self.capture = cv2.VideoCapture(0)
+        self.capture = cv2.VideoCapture(0,  cv2.CAP_DSHOW)
         Clock.schedule_interval(self.load_video, 1.0/30.0)
 
 
@@ -276,51 +277,51 @@ class Velo(MDApp):
         self.image_frame = frames
 
         ball_width = 7.6
+        if frames is not None:
+            blurred = cv2.GaussianBlur(frames, (11,11), 0)
+            hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+            # sensitivity = 15
+            # lower_white = np.array([0,0,255-sensitivity])
+            # upper_white = np.array([255,sensitivity,255])
 
-        blurred = cv2.GaussianBlur(frames, (11,11), 0)
-        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-        # sensitivity = 15
-        # lower_white = np.array([0,0,255-sensitivity])
-        # upper_white = np.array([255,sensitivity,255])
+            lower_white = (29, 86, 6)
+            upper_white = (64, 255, 255)
+            pts = deque(maxlen=64)
 
-        lower_white = (29, 86, 6)
-        upper_white = (64, 255, 255)
-        pts = deque(maxlen=64)
+            mask = cv2.inRange(hsv, lower_white, upper_white)
+            mask = cv2.erode(mask, None, iterations=3)
+            mask = cv2.dilate(mask, None, iterations=3)
 
-        mask = cv2.inRange(hsv, lower_white, upper_white)
-        mask = cv2.erode(mask, None, iterations=3)
-        mask = cv2.dilate(mask, None, iterations=3)
-
-        cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        cnts = imutils.grab_contours(cnts)
-        center = None
-
-
-        if len(cnts) > 0:
-            c = max(cnts, key=cv2.contourArea)
-            ((x, y), radius) = cv2.minEnclosingCircle(c)
-            M = cv2.moments(c)
-            center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-
-            if radius > 10:
-                cv2.circle(frames, (int(x), int(y)), int(radius),
-                           (0, 255, 255), 4)
-                cv2.circle(frames, center, 5, (0, 0, 255), -1)
-
-            if self.previous_center is not None:
-                displacement = ((cx - self.previous_center[0]) ** 2 + (cy - self.previous_center[1]) ** 2) ** 0.5
-                time_elapsed = time.time() - self.previous_time
-
-                speed = (displacement * 0.000008) / (time_elapsed / 3600)
-
-                listSpeed.append(speed)
-                self.averageSpeed = self.averageFinder(listSpeed, 10)
+            cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            cnts = imutils.grab_contours(cnts)
+            center = None
 
 
-            self.previous_center = (cx, cy)
-            self.previous_time = time.time()
+            if len(cnts) > 0:
+                c = max(cnts, key=cv2.contourArea)
+                ((x, y), radius) = cv2.minEnclosingCircle(c)
+                M = cv2.moments(c)
+                center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+
+                if radius > 10:
+                    cv2.circle(frames, (int(x), int(y)), int(radius),
+                               (0, 255, 255), 4)
+                    cv2.circle(frames, center, 5, (0, 0, 255), -1)
+
+                if self.previous_center is not None:
+                    displacement = ((cx - self.previous_center[0]) ** 2 + (cy - self.previous_center[1]) ** 2) ** 0.5
+                    time_elapsed = time.time() - self.previous_time
+
+                    speed = (displacement * 0.000008) / (time_elapsed / 3600)
+
+                    listSpeed.append(speed)
+                    self.averageSpeed = self.averageFinder(listSpeed, 10)
+
+
+                self.previous_center = (cx, cy)
+                self.previous_time = time.time()
 
 
         # if (len(cnts) == 0):
@@ -330,19 +331,19 @@ class Velo(MDApp):
         #     cv2.putText(frames, f"Speed: {round(self.averageSpeed, 2)} mph", (50, 75), fonts, 0.6, (0, 255, 220), 2)
 
 
-        pts.appendleft(center)
+            pts.appendleft(center)
 
-        for i in range(1, len(pts)):
-            if pts[i - 1] is None or pts[i] is None:
-                continue
-            thickness = int(np.sqrt(64 / float(i + 1)) * 2.5)
-            cv2.line(frames, pts[i - 1], pts[i], (0, 0, 255), thickness)
+            for i in range(1, len(pts)):
+                if pts[i - 1] is None or pts[i] is None:
+                    continue
+                thickness = int(np.sqrt(64 / float(i + 1)) * 2.5)
+                cv2.line(frames, pts[i - 1], pts[i], (0, 0, 255), thickness)
 
 
-        buffer = cv2.flip(frames, 0).tobytes()
-        texture = Texture.create(size=(frames.shape[1], frames.shape[0]), colorfmt='bgr')
-        texture.blit_buffer(buffer, colorfmt='bgr', bufferfmt='ubyte')
-        self.image.texture = texture
+            buffer = cv2.flip(frames, 0).tobytes()
+            texture = Texture.create(size=(frames.shape[1], frames.shape[0]), colorfmt='bgr')
+            texture.blit_buffer(buffer, colorfmt='bgr', bufferfmt='ubyte')
+            self.image.texture = texture
 
 
 
