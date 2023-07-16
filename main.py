@@ -12,7 +12,7 @@ from kivy.graphics.texture import Texture
 from collections import deque
 import cv2
 import time
-
+from kivy.utils import platform
 # declaration of variables
 
 
@@ -42,7 +42,6 @@ face_detector = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 
 averageSpeed1=0
 
-Window.size = (360, 640)
 
 screen_helper = """
 ScreenManager:
@@ -260,9 +259,15 @@ class Velo(MDApp):
         # layout.add_widget(self.image)
         # layout.add_widget(MDFlatButton(text="Click on me!"))
 
+        if platform == 'android':
+            from android.permissions import request_permissions, Permission
+            request_permissions([Permission.CAMERA], self.permission_granted)
+
+    def permission_granted(self):
+
         self.image = screen.ids.image_widget
         self.capture = cv2.VideoCapture(0)
-        Clock.schedule_interval(self.load_video, 1.0/20.0)
+        Clock.schedule_interval(self.load_video, 1.0/30.0)
 
 
     def load_video(self, *args):
